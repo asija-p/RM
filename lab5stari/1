@@ -1,0 +1,128 @@
+#include <winsock.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <fstream>
+
+#pragma comment(lib, "wsock32.lib")
+#define _CRT_SECURE_NO_WARNINGS
+
+using namespace std;
+
+int main()
+{
+    WSAData wsa;
+    WSAStartup(0x0202, &wsa);
+
+    SOCKET sock;
+    sockaddr_in server;
+
+    if ((sock = socket(AF_INET, SOCK_STREAM, 0)) == SOCKET_ERROR)
+    {
+        WSACleanup();
+        return 1;
+    }
+
+    server.sin_family = AF_INET;
+    server.sin_port = htons(8000);
+    server.sin_addr.s_addr = htonl(INADDR_ANY);
+
+    if (bind(sock, (sockaddr*)&server, sizeof(sockaddr)) == SOCKET_ERROR ||
+        listen(sock, 10) == SOCKET_ERROR)
+    {
+        closesocket(sock);
+        WSACleanup();
+        return 1;
+    }
+
+    while (true)
+    {
+        SOCKET comSock;
+        sockaddr_in client;
+        int addr_len = sizeof(sockaddr);
+
+        if ((comSock = accept(sock, (sockaddr*)&client, &addr_len)) == SOCKET_ERROR)
+            continue;
+
+        char recvBuf[1024] = { 0 };
+        int bytes_recv = recv(comSock, recvBuf, sizeof(recvBuf) - 1, 0);
+        if (bytes_recv <= 0)
+        {
+            closesocket(comSock);
+            continue;
+        }
+
+        printf("Request: %s\n", recvBuf);
+
+        // Parse requested file
+        char fileName[256] = { 0 };
+        sscanf(recvBuf, "GET /%s ", fileName); // Simple parsing
+
+        if (strlen(fileName) == 0)
+        {
+            const char* badRequest = "HTTP/1.1 400 Bad Request\r\nContent-Length: 23\r\nContent-Type: text/plain\r\n\r\n400 Error: Bad request!";
+            send(comSock, badRequest, strlen(badRequest), 0);
+            closesocket(comSock);
+            continue;
+        }
+
+        // Add file path
+        char fullPath[MAX_PATH] = "C:\\Users\\Anastasija\\Desktop\\l\\OneDrive_2025-04-21\\New folder\\zad1\\slika\\";
+        strcat(fullPath, fileName);
+
+        // Open file
+        FILE* fp = fopen(fullPath, "rb");
+        if (!fp)
+        {
+            const char* notFound = "HTTP/1.1 404 Not Found\r\nContent-Length: 26\r\nContent-Type: text/plain\r\n\r\n404 Error: File not Found!";
+            send(comSock, notFound, strlen(notFound), 0);
+            closesocket(comSock);
+            continue;
+        }
+
+        // Get file size
+        fseek(fp, 0, SEEK_END);
+        long fileSize = ftell(fp);
+        rewind(fp);
+
+        char* fileBuf = new char[fileSize];
+        fread(fileBuf, 1, fileSize, fp);
+        fclose(fp);
+
+        // Detect content type
+        const char* contentType = nullptr;
+        if (strstr(fileName, ".jpg") || strstr(fileName, ".jpeg"))
+            contentType = "image/jpeg";
+        else if (strstr(fileName, ".png"))
+            contentType = "image/png";
+        else if (strstr(fileName, ".gif"))
+            contentType = "image/gif";
+        else
+        {
+            const char* notSupported = "HTTP/1.1 505 HTTP Version Not Supported\r\nContent-Length: 33\r\nContent-Type: text/plain\r\n\r\n505 Error: File type not supported!";
+            send(comSock, notSupported, strlen(notSupported), 0);
+            delete[] fileBuf;
+            closesocket(comSock);
+            continue;
+        }
+
+        // Build header
+        char header[256];
+        sprintf(header,
+            "HTTP/1.1 200 OK\r\n"
+            "Content-Length: %ld\r\n"
+            "Content-Type: %s\r\n\r\n",
+            fileSize, contentType);
+
+        // Send header and file
+        send(comSock, header, strlen(header), 0);
+        send(comSock, fileBuf, fileSize, 0);
+
+        delete[] fileBuf;
+        closesocket(comSock);
+    }
+
+    closesocket(sock);
+    WSACleanup();
+    return 0;
+}
