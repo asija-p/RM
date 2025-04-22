@@ -1,0 +1,84 @@
+#include <winsock.h>
+#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
+#pragma comment(lib, "wsock32.lib")
+
+int main()
+{
+    WSAData wsa;
+    WSAStartup(0x0202, &wsa);
+
+    SOCKET sock;
+    sockaddr_in server;
+
+    char* url = "www.example.com";  // Example URL, change as needed
+    char* path = "/";  // Default to root if no specific path
+    char* host = NULL;
+    char* start;
+    struct hostent* remote_host;
+
+    // Resolve the host to an IP address
+    if ((remote_host = gethostbyname(host)) == NULL)
+    {
+        printf("Host resolution failed.\n");
+        WSACleanup();
+        return 1;
+    }
+
+    // Create the socket
+    if ((sock = socket(AF_INET, SOCK_STREAM, 0)) == SOCKET_ERROR)
+    {
+        printf("Socket creation failed.\n");
+        WSACleanup();
+        return 1;
+    }
+
+    // Set up server address structure
+    server.sin_family = AF_INET;
+    server.sin_port = htons(80);
+    memcpy(&server.sin_addr, remote_host->h_addr, remote_host->h_length);
+
+    // Connect to the server
+    if (connect(sock, (sockaddr*)&server, sizeof(server)) == SOCKET_ERROR)
+    {
+        printf("Connection failed.\n");
+        closesocket(sock);
+        WSACleanup();
+        return 1;
+    }
+
+    // Construct the GET request
+    char send_data[1024];
+    snprintf(send_data, sizeof(send_data), "GET /%s HTTP/1.0\r\nHost: %s\r\n\r\n", path, host);
+
+    // Send the request
+    send(sock, send_data, strlen(send_data), 0);
+
+    // Receive the response
+    char recv_data[1024];
+    ZeroMemory(recv_data, sizeof(recv_data));
+    recv(sock, recv_data, sizeof(recv_data), 0);
+
+    // Search for the "Last-Modified" header
+    char* temp = strstr(recv_data, "Last-Modified: ");
+    if (temp != NULL)
+    {
+        temp += strlen("Last-Modified: "); // Skip "Last-Modified: "
+        while (*temp != '\n' && *temp != '\r' && *temp != '\0')
+        {
+            printf("%c", *temp++);
+        }
+        printf("\n");
+    }
+    else
+    {
+        printf("No Last-Modified information found!\n");
+    }
+
+    // Clean up
+    closesocket(sock);
+    WSACleanup();
+
+    return 0;
+}
