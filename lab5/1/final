@@ -1,0 +1,80 @@
+#include <iostream>
+#include <string>
+#include <winsock2.h>
+#include <ws2tcpip.h> // Required for getaddrinfo
+#pragma comment(lib, "ws2_32.lib")
+#define BUF_SIZE 4096
+
+void ExitWithError(const std::string& message) {
+    std::cerr << message << ". Error code: " << WSAGetLastError() << std::endl;
+    WSACleanup();
+    exit(1);
+}
+
+std::string buildHttpRequest(const std::string& host, const std::string& path, bool conditional) {
+    std::string request = "GET " + path + " HTTP/1.1\r\n";
+    request += "Host: " + host + "\r\n";
+    if (conditional) {
+        request += "If-Modified-Since: Thu, 10 Dec 2020 00:00:00 GMT\r\n";
+    }
+    request += "Connection: close\r\n\r\n";
+    return request;
+}
+
+int main() {
+    WSADATA wsa;
+    if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0) {
+        ExitWithError("WSAStartup failed");
+    }
+
+    SOCKET sock = socket(AF_INET, SOCK_STREAM, 0);
+    if (sock == INVALID_SOCKET) {
+        ExitWithError("Socket creation failed");
+    }
+
+    std::string host;
+    std::getline(std::cin, host);
+    std::string path = "/";
+    bool conditional = true;
+
+    // Modern host resolution
+    addrinfo hints = {}, * result = nullptr;
+    hints.ai_family = AF_INET;
+    hints.ai_socktype = SOCK_STREAM;
+    hints.ai_protocol = IPPROTO_TCP;
+
+    if (getaddrinfo(host.c_str(), "http", &hints, &result) != 0) {
+        ExitWithError("Hostname resolution failed");
+    }
+
+    // Connect using the first resolved address
+    sockaddr_in server = *reinterpret_cast<sockaddr_in*>(result->ai_addr);
+    freeaddrinfo(result);
+
+    server.sin_port = htons(80);
+    if (connect(sock, (sockaddr*)&server, sizeof(server)) == SOCKET_ERROR) {
+        ExitWithError("Connection failed");
+    }
+
+    // [Rest of your existing code...]
+    std::string request = buildHttpRequest(host, path, conditional);
+    if (send(sock, request.c_str(), request.size(), 0) == SOCKET_ERROR) {
+        ExitWithError("Send failed");
+    }
+
+    char buffer[BUF_SIZE];
+    int bytesReceived;
+    std::string response;
+    while ((bytesReceived = recv(sock, buffer, BUF_SIZE, 0)) > 0) {
+        response.append(buffer, bytesReceived);
+    }
+    if (bytesReceived == SOCKET_ERROR) {
+        ExitWithError("Receive failed");
+    }
+
+    std::cout << "Server response:\n" << response << std::endl;
+
+    closesocket(sock);
+    WSACleanup();
+    return 0;
+} // try with www.example.com
