@@ -126,3 +126,4 @@ int main()
     WSACleanup();
     return 0;
 }
+//http://localhost:8000/slika.jpg here it will work
