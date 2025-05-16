@@ -1,0 +1,100 @@
+#include <iostream>
+#include <string>
+#include <vector>
+#include <winsock.h>
+#include <ctime>
+#pragma comment(lib, "wsock32.lib")
+#define serverPort 8080  // Standard HTTP port
+#define BUF_SIZE 1024  // Larger buffer for HTTP responses
+using namespace std;
+
+void ExitWithError(const string& message)
+{
+    cout << message << " Error code: " << WSAGetLastError() << endl;
+    WSACleanup();
+    exit(1);
+}
+
+void printMessage(const string& message)
+{
+    cout << "Server Response:\n" << message << endl;
+}
+
+string formatHttpRequest(const string& path, bool conditional)
+{
+    string request = "GET " + path + " HTTP/1.1\r\n";
+    request += "Host: localhost\r\n";
+
+    if (conditional)
+    {
+        // If-Modified-Since header for conditional GET (after Dec 10, 2020)
+        request += "If-Modified-Since: Thu, 10 Dec 2020 00:00:00 GMT\r\n";
+    }
+
+    request += "Connection: close\r\n";
+    request += "\r\n";  // End of headers
+
+    return request;
+}
+
+int main()
+{
+    cout << "HTTP Client with Conditional GET" << endl;
+
+    WSAData wsa;
+    SOCKET clientsock;
+
+    if (WSAStartup(0x0202, &wsa) != 0)
+        ExitWithError("Startup failed.");
+
+    if ((clientsock = socket(AF_INET, SOCK_STREAM, 0)) == INVALID_SOCKET)
+        ExitWithError("Socket not created");
+
+    const char* serverAddr = "127.0.0.1";
+
+    sockaddr_in server;
+    server.sin_family = AF_INET;
+    server.sin_addr.s_addr = inet_addr(serverAddr);
+    server.sin_port = htons(serverPort);
+
+    if (connect(clientsock, (struct sockaddr*)&server, sizeof(server)) == SOCKET_ERROR)
+        ExitWithError("connect() failed");
+
+    while (true)
+    {
+        cout << "\nEnter resource path (e.g., /index.html) or 'quit' to exit: ";
+        string path;
+        getline(cin, path);
+
+        if (path == "quit") break;
+
+        cout << "Send as conditional GET? (y/n): ";
+        string conditional;
+        getline(cin, conditional);
+
+        bool isConditional = (conditional == "y" || conditional == "Y");
+
+        string httpRequest = formatHttpRequest(path, isConditional);
+
+        if (send(clientsock, httpRequest.c_str(), httpRequest.length(), 0) != httpRequest.length())
+            ExitWithError("send() failed");
+
+        int recvMsgSize = 0;
+        vector<char> buff(BUF_SIZE);
+        string fullResponse = "";
+
+        while ((recvMsgSize = recv(clientsock, buff.data(), buff.size(), 0)) > 0)
+        {
+            fullResponse.append(buff.data(), recvMsgSize);
+        }
+
+        if (recvMsgSize < 0)
+            ExitWithError("recv() failed");
+
+        printMessage(fullResponse);
+    }
+
+    closesocket(clientsock);
+    WSACleanup();
+    return 0;
+}
