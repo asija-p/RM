@@ -1,0 +1,122 @@
+#include <winsock2.h>
+#include <iostream>
+#include <vector>
+#include <string>
+#pragma comment(lib, "ws2_32.lib")
+
+#define PORT 1100
+
+std::vector<std::string> messages = {
+    "1 500",  // Message ID and size in bytes
+    "2 300",
+    "3 750"
+};
+
+std::vector<std::string> messageContents = {
+    "From: sender1@example.com\nSubject: Test 1\n\nBody of message 1",
+    "From: sender2@example.com\nSubject: Test 2\n\nBody of message 2",
+    "From: sender3@example.com\nSubject: Test 3\n\nBody of message 3"
+};
+
+void handleClient(SOCKET clientSocket) {
+    char buffer[1024];
+    int bytesReceived;
+    
+    // Send welcome message
+    std::string welcome = "+OK POP3 server ready\r\n";
+    send(clientSocket, welcome.c_str(), welcome.size(), 0);
+
+    while (true) {
+        bytesReceived = recv(clientSocket, buffer, sizeof(buffer), 0);
+        if (bytesReceived <= 0) break;
+
+        buffer[bytesReceived] = '\0';
+        std::string command(buffer);
+
+        std::string response;
+        
+        if (command.find("LIST") != std::string::npos) {
+            response = "+OK " + std::to_string(messages.size()) + " messages\r\n";
+            for (const auto& msg : messages) {
+                response += msg + "\r\n";
+            }
+            response += ".\r\n";
+        }
+        else if (command.find("RETR ") != std::string::npos) {
+            int msgId = std::stoi(command.substr(5));
+            if (msgId > 0 && msgId <= messageContents.size()) {
+                response = "+OK " + std::to_string(messageContents[msgId-1].size()) + " octets\r\n";
+                response += messageContents[msgId-1] + "\r\n.\r\n";
+            } else {
+                response = "-ERR no such message\r\n";
+            }
+        }
+        else if (command.find("QUIT") != std::string::npos) {
+            response = "+OK POP3 server signing off\r\n";
+            send(clientSocket, response.c_str(), response.size(), 0);
+            break;
+        }
+        else {
+            response = "-ERR Unknown command\r\n";
+        }
+
+        send(clientSocket, response.c_str(), response.size(), 0);
+    }
+
+    closesocket(clientSocket);
+}
+
+int main() {
+    WSADATA wsaData;
+    if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
+        std::cerr << "WSAStartup failed\n";
+        return 1;
+    }
+
+    SOCKET serverSocket = socket(AF_INET, SOCK_STREAM, 0);
+    if (serverSocket == INVALID_SOCKET) {
+        std::cerr << "Socket creation failed\n";
+        WSACleanup();
+        return 1;
+    }
+
+    sockaddr_in serverAddr;
+    serverAddr.sin_family = AF_INET;
+    serverAddr.sin_addr.s_addr = INADDR_ANY;
+    serverAddr.sin_port = htons(PORT);
+
+    if (bind(serverSocket, (sockaddr*)&serverAddr, sizeof(serverAddr)) == SOCKET_ERROR) {
+        std::cerr << "Bind failed\n";
+        closesocket(serverSocket);
+        WSACleanup();
+        return 1;
+    }
+
+    if (listen(serverSocket, 5) == SOCKET_ERROR) {
+        std::cerr << "Listen failed\n";
+        closesocket(serverSocket);
+        WSACleanup();
+        return 1;
+    }
+
+    std::cout << "POP3-like server running on port " << PORT << std::endl;
+
+    while (true) {
+        sockaddr_in clientAddr;
+        int clientAddrSize = sizeof(clientAddr);
+        SOCKET clientSocket = accept(serverSocket, (sockaddr*)&clientAddr, &clientAddrSize);
+        
+        if (clientSocket == INVALID_SOCKET) {
+            std::cerr << "Accept failed\n";
+            continue;
+        }
+
+        std::cout << "Client connected\n";
+        handleClient(clientSocket);
+        std::cout << "Client disconnected\n";
+    }
+
+    closesocket(serverSocket);
+    WSACleanup();
+    return 0;
+}
