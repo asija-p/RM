@@ -1,0 +1,131 @@
+#include <winsock2.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <fstream>
+
+#pragma comment(lib, "ws2_32.lib")
+#define _CRT_SECURE_NO_WARNINGS
+
+using namespace std;
+
+void sendErrorResponse(SOCKET sock, int code, const char* message) {
+    char response[256];
+    sprintf(response, 
+        "HTTP/1.1 %d %s\r\n"
+        "Content-Type: text/plain\r\n"
+        "Content-Length: %zu\r\n\r\n"
+        "%d Error: %s",
+        code, message, strlen(message) + 4, code, message);
+    send(sock, response, strlen(response), 0);
+}
+
+int main()
+{
+    WSAData wsa;
+    WSAStartup(0x0202, &wsa);
+
+    SOCKET sock;
+    sockaddr_in server;
+
+    if ((sock = socket(AF_INET, SOCK_STREAM, 0)) == SOCKET_ERROR)
+    {
+        WSACleanup();
+        return 1;
+    }
+
+    server.sin_family = AF_INET;
+    server.sin_port = htons(8000);
+    server.sin_addr.s_addr = htonl(INADDR_ANY);
+
+    if (bind(sock, (sockaddr*)&server, sizeof(sockaddr)) == SOCKET_ERROR ||
+        listen(sock, 10) == SOCKET_ERROR)
+    {
+        closesocket(sock);
+        WSACleanup();
+        return 1;
+    }
+
+    while (true)
+    {
+        SOCKET comSock;
+        sockaddr_in client;
+        int addr_len = sizeof(sockaddr);
+
+        if ((comSock = accept(sock, (sockaddr*)&client, &addr_len)) == SOCKET_ERROR)
+            continue;
+
+        char recvBuf[1024] = { 0 };
+        int bytes_recv = recv(comSock, recvBuf, sizeof(recvBuf) - 1, 0);
+        if (bytes_recv <= 0)
+        {
+            closesocket(comSock);
+            continue;
+        }
+
+        printf("Request: %s\n", recvBuf);
+
+        // Parse requested file
+        char fileName[256] = { 0 };
+        sscanf(recvBuf, "GET /%s ", fileName);
+
+        // Check for empty request
+        if (strlen(fileName) == 0)
+        {
+            sendErrorResponse(comSock, 400, "Bad Request");
+            closesocket(comSock);
+            continue;
+        }
+
+        // Check if file is PNG
+        char* ext = strrchr(fileName, '.');
+        if (ext == NULL || strcmp(ext, ".png") != 0)
+        {
+            sendErrorResponse(comSock, 415, "Unsupported Media Type - Only PNG files are allowed");
+            closesocket(comSock);
+            continue;
+        }
+
+        // Build full path
+        char fullPath[MAX_PATH] = "C:\\Users\\Anastasija\\Desktop\\l\\OneDrive_2025-04-21\\New folder\\zad1\\slika\\";
+        strcat(fullPath, fileName);
+
+        // Open file
+        FILE* fp = fopen(fullPath, "rb");
+        if (!fp)
+        {
+            sendErrorResponse(comSock, 404, "Not Found");
+            closesocket(comSock);
+            continue;
+        }
+
+        // Get file size
+        fseek(fp, 0, SEEK_END);
+        long fileSize = ftell(fp);
+        rewind(fp);
+
+        // Read file
+        char* fileBuf = new char[fileSize];
+        fread(fileBuf, 1, fileSize, fp);
+        fclose(fp);
+
+        // Build response header
+        char header[256];
+        sprintf(header,
+            "HTTP/1.1 200 OK\r\n"
+            "Content-Type: image/png\r\n"
+            "Content-Length: %ld\r\n\r\n",
+            fileSize);
+
+        // Send response
+        send(comSock, header, strlen(header), 0);
+        send(comSock, fileBuf, fileSize, 0);
+
+        delete[] fileBuf;
+        closesocket(comSock);
+    }
+
+    closesocket(sock);
+    WSACleanup();
+    return 0;
+}
