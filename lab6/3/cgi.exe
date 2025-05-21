@@ -1,0 +1,70 @@
+#include <iostream>      // std::cout, std::cin
+#include <cstdlib>       // getenv(), atoi()
+#include <string>        // std::string
+#include <fstream>       // std::ifstream
+#include <vector>        // std::vector
+#include <io.h>          // _fileno()       ← Windows-specific
+#include <fcntl.h>       // _O_BINARY, _O_TEXT  ← Windows-specific
+#include <map>
+#include <sstream>
+#include <iomanip>
+#include <regex>
+
+const int IMAGE_WIDTH = 149;
+int x;
+
+void parse(std::string str)
+{
+	int pos1 = str.find("region.x=", 0);
+	int pos2 = str.find("&", pos1 + 9);
+	std::string xStr = str.substr(pos1+9, pos2);
+	x = std::stoi(xStr);
+
+}
+
+void main(int argc, char* argv[])
+{
+	std::string reqmethod = getenv("REQUEST_METHOD");
+	std::string q_string = getenv("QUERY_STRING");
+	int br_byte = atoi(getenv("CONTENT_LENGTH"));
+	std::string postInputString;
+
+	if (reqmethod == "GET") // GET zahtev
+	{
+		if (!q_string.empty())
+			parse(q_string);
+	}
+	else if (reqmethod == "POST") // POST zahtev
+	{
+		if (!q_string.empty())
+			parse(q_string);
+
+		if (br_byte > 0)
+		{
+			std::cin >> postInputString;
+			parse(postInputString);
+		}
+	}
+
+	std::string strana;
+
+	if (x >IMAGE_WIDTH / 2)
+	{
+		strana = "zuto";
+	}
+	else
+	{
+		strana = "crveno";
+	}
+
+	std::cout << "Content-Type: text/html\n\n";
+	std::cout << "<html> <head>\n";
+	std::cout << "<title>Zad.3</title>\n";
+	std::cout << "</head>\n";
+	std::cout << "<body>\n";
+	std::cout << "<h1>Lab. vezba 6 - Zad.3</h1>\n";
+	std::cout << "<p>Kliknuli ste na: " << strana << "\n";
+	std::cout << "</body> </html>\n";
+
+}
+
