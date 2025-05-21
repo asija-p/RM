@@ -1,0 +1,87 @@
+#include <iostream>      // std::cout, std::cin
+#include <cstdlib>       // getenv(), atoi()
+#include <string>        // std::string
+#include <fstream>       // std::ifstream
+#include <vector>        // std::vector
+#include <io.h>          // _fileno()       ← Windows-specific
+#include <fcntl.h>       // _O_BINARY, _O_TEXT  ← Windows-specific
+#include <map>
+#include <sstream>
+#include <iomanip>
+#include <regex>
+
+int number;
+
+void parse(std::string str)
+{
+	int pos = str.find("broj=", 0);
+	std::string val = str.substr(pos + 5);
+	number = std::stoi(val);
+}
+
+void SendFile(std::string outName)
+{
+	std::ifstream file(outName, std::ios::in | std::ios::binary);
+
+	if (!file.is_open())
+	{
+		std::cout << "Content-Type: text/plain\r\n\r\n";
+		std::cout << "File not found!\n";
+		return;
+	}
+
+	file.seekg(0, std::ios::end);
+	long size = file.tellg();
+	file.seekg(0, std::ios::beg);
+
+	std::cout // "HTTP/1.1 200
+		<< "Content-Type: image/jpeg\r\n"
+		<< "Content-Length: " << size << "\r\n"
+		<< "\r\n";
+
+
+	auto result = _setmode(_fileno(stdout), _O_BINARY);
+
+	if (result == -1)
+		std::cout << "Ne moze se postaviti binarni mod!" << std::endl;
+	else
+	{
+		std::vector<char> buffer(size);
+
+		file.read(buffer.data(), size);
+		
+		std::cout.write(buffer.data(), size);
+		fflush(stdout);
+
+		_setmode(_fileno(stdout), _O_TEXT);
+	}
+
+	file.close();
+}
+
+void main(int argc, char* argv[])
+{
+	std::string reqmethod = getenv("REQUEST_METHOD");
+	std::string q_string = getenv("QUERY_STRING");
+	//NEMA CONTENT-LENGTH KAD JE GET ZASTO OVO NE ZNAAAM
+
+	std::string postInputString;
+
+	if (reqmethod == "GET") // GET zahtev
+	{
+		if (!q_string.empty())
+			parse(q_string);
+	}
+	else if (reqmethod == "POST") // POST zahtev
+	{
+		if (!q_string.empty())
+			parse(q_string);
+	}
+
+	if (number % 2 != 0)
+		SendFile("n.jpg");
+	else
+		SendFile("p.jpg");
+	
+
+}
