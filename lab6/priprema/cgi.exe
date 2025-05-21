@@ -1,0 +1,115 @@
+#include <iostream>      // std::cout, std::cin
+#include <cstdlib>       // getenv(), atoi()
+#include <string>        // std::string
+#include <fstream>       // std::ifstream
+#include <vector>        // std::vector
+#include <io.h>          // _fileno()       ← Windows-specific
+#include <fcntl.h>       // _O_BINARY, _O_TEXT  ← Windows-specific
+#include <map>
+#include <sstream>
+#include <iomanip>
+
+std::map<std::string, std::string> formData;
+
+std::string urlDecode(const std::string& str) {
+	std::ostringstream decoded;
+	for (size_t i = 0; i < str.length(); ++i) {
+		if (str[i] == '+') {
+			decoded << ' ';
+		}
+		else if (str[i] == '%' && i + 2 < str.length()) {
+			std::istringstream hex(str.substr(i + 1, 2));
+			int value;
+			hex >> std::hex >> value;
+			decoded << static_cast<char>(value);
+			i += 2;
+		}
+		else {
+			decoded << str[i];
+		}
+	}
+	return decoded.str();
+}
+
+std::map<std::string, std::string> parse(const std::string& data) {
+	std::map<std::string, std::string> result;
+	std::stringstream ss(data);
+	std::string pair;
+	while (std::getline(ss, pair, '&')) {
+		size_t eqPos = pair.find('=');
+		if (eqPos != std::string::npos) {
+			std::string key = urlDecode(pair.substr(0, eqPos));
+			std::string value = urlDecode(pair.substr(eqPos + 1));
+			result[key] = value;
+		}
+	}
+	return result;
+}
+
+void SendFile(std::string outName)
+{
+	std::ifstream file(outName, std::ios::in | std::ios::binary);
+
+	if (!file.is_open())
+	{
+		std::cout << "fajl nije pronadjen!" << std::endl;
+		return;
+	}
+
+	file.seekg(0, std::ios::end);
+	long size = file.tellg();
+	file.seekg(0, std::ios::beg);
+//bukvalno ova tri reda su napravila da kod radi, na vezbi je pisalo samo long size = file.tellg(); i to meni nije radilo jer kako kaze chatgpt, to vraca 0
+
+	std::cout // "HTTP/1.1 200
+		<< "Content-Type: image/jpeg\r\n"
+		<< "Content-Length: " << size << "\r\n"
+		<< "\r\n";
+
+	/* Postaviti "stdout" na binarni mod, ne koristi se za html i txt*/
+	auto result = _setmode(_fileno(stdout), _O_BINARY);
+
+	if (result == -1)
+		std::cout << "Ne moze se postaviti binarni mod!" << std::endl;else
+	{
+		std::vector<char> buffer;
+		buffer.resize(size);
+		file.seekg(0, std::ios::beg);
+		file.read(buffer.data(), size);
+		std::cout.write(buffer.data(), size);
+		fflush(stdout);
+		_setmode(_fileno(stdout), _O_TEXT);
+	}
+	file.close();
+}
+
+void main(int argc, char* argv[])
+{
+	std::string reqmethod = getenv("REQUEST_METHOD");
+	std::string q_string = getenv("QUERY_STRING");
+	int br_byte = atoi(getenv("CONTENT_LENGTH"));
+	std::string postInputString;
+
+	std::map<std::string, std::string> gtParams;
+	std::map<std::string, std::string> pstParams;
+
+	if (reqmethod == "GET") // GET zahtev
+	{
+		if (!q_string.empty())
+			parse(q_string);
+	}
+	else if (reqmethod == "POST") // POST zahtev
+	{
+		if (!q_string.empty())
+			gtParams = parse(q_string);
+
+		if (br_byte > 0)
+		{
+			std::cin >> postInputString;
+			pstParams = parse(postInputString);
+		}
+	}
+
+	SendFile(pstParams["name"]);
+}
+
