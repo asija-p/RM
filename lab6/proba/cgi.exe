@@ -1,0 +1,11 @@
+#include <iostream>
+
+int main() {
+    std::cout << "Content-type: text/html\r\n\r\n";
+    std::cout << "<html><head><title>CGI Response</title></head><body>";
+    std::cout << "<h1>CGI script is working!</h1>";
+    std::cout << "</body></html>";
+    return 0;
+}
+
+//ne otvarati direktno index.html nego ici na http://127.0.0.1/
