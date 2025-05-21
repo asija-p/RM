@@ -8,42 +8,25 @@
 #include <map>
 #include <sstream>
 #include <iomanip>
+#include <regex>
 
 std::map<std::string, std::string> formData;
 
-std::string urlDecode(const std::string& str) {
-	std::ostringstream decoded;
-	for (size_t i = 0; i < str.length(); ++i) {
-		if (str[i] == '+') {
-			decoded << ' ';
-		}
-		else if (str[i] == '%' && i + 2 < str.length()) {
-			std::istringstream hex(str.substr(i + 1, 2));
-			int value;
-			hex >> std::hex >> value;
-			decoded << static_cast<char>(value);
-			i += 2;
-		}
-		else {
-			decoded << str[i];
-		}
-	}
-	return decoded.str();
-}
+std::map<std::string, std::string> parse(const std::string val)
+{
+	std::map<std::string, std::string> retval;
+	std::regex pattern("([\\w%+]+)=([^&]*)");
 
-std::map<std::string, std::string> parse(const std::string& data) {
-	std::map<std::string, std::string> result;
-	std::stringstream ss(data);
-	std::string pair;
-	while (std::getline(ss, pair, '&')) {
-		size_t eqPos = pair.find('=');
-		if (eqPos != std::string::npos) {
-			std::string key = urlDecode(pair.substr(0, eqPos));
-			std::string value = urlDecode(pair.substr(eqPos + 1));
-			result[key] = value;
-		}
+	auto begin = std::sregex_iterator(val.begin(), val.end(), pattern);
+	auto end = std::sregex_iterator();
+	for (std::sregex_iterator i = begin; i != end; i++)
+	{
+		std::string key = (*i)[1].str();
+		std::string value = (*i)[2].str();
+		retval[key] = value;
 	}
-	return result;
+
+	return retval;
 }
 
 void SendFile(std::string outName)
@@ -59,7 +42,6 @@ void SendFile(std::string outName)
 	file.seekg(0, std::ios::end);
 	long size = file.tellg();
 	file.seekg(0, std::ios::beg);
-//bukvalno ova tri reda su napravila da kod radi, na vezbi je pisalo samo long size = file.tellg(); i to meni nije radilo jer kako kaze chatgpt, to vraca 0
 
 	std::cout // "HTTP/1.1 200
 		<< "Content-Type: image/jpeg\r\n"
