@@ -1,0 +1,102 @@
+#include <iostream>      // std::cout, std::cin
+#include <cstdlib>       // getenv(), atoi()
+#include <string>        // std::string
+#include <fstream>       // std::ifstream
+#include <vector>        // std::vector
+#include <io.h>          // _fileno()       ← Windows-specific
+#include <fcntl.h>       // _O_BINARY, _O_TEXT  ← Windows-specific
+#include <map>
+#include <sstream>
+#include <iomanip>
+#include <regex>
+
+
+
+std::string parse(std::string str)
+{
+	std::string slika;
+
+	int pos1 = str.find("naziv=", 0);
+	int pos2 = str.find("&", pos1 + 6);
+	std::string naziv = str.substr(pos1+6, pos2-pos1-6);
+
+	pos1 = str.find("ekstenzija=", pos2);
+	std::string ekstenzija = str.substr(pos1 + 11);
+
+	slika = naziv + ekstenzija;
+
+	return slika;
+}
+
+void SendFile(std::string outName)
+{
+	std::ifstream file(outName, std::ios::in | std::ios::binary);
+
+	if (!file.is_open())
+	{
+		std::cout << "Content-Type: text/html\n\n";
+		std::cout << "<html> <head>\n";
+		std::cout << "<title>Slika</title>\n";
+		std::cout << "</head>\n";
+		std::cout << "<body>\n";
+		std::cout << "<h1>Slika nije pronadjena!</h1>\n";
+		std::cout << "</body> </html>\n";
+		return;
+	}
+
+	file.seekg(0, std::ios::end);
+	long size = file.tellg();
+	file.seekg(0, std::ios::beg);
+
+	std::cout // "HTTP/1.1 200
+		<< "Content-Type: image/jpeg\r\n"
+		<< "Content-Length: " << size << "\r\n"
+		<< "\r\n";
+
+	/* Postaviti "stdout" na binarni mod, ne koristi se za html i txt*/
+	auto result = _setmode(_fileno(stdout), _O_BINARY);
+
+	if (result == -1)
+		std::cout << "Ne moze se postaviti binarni mod!" << std::endl;else
+	{
+		std::vector<char> buffer;
+		buffer.resize(size);
+		file.seekg(0, std::ios::beg);
+		file.read(buffer.data(), size);
+		std::cout.write(buffer.data(), size);
+		fflush(stdout);
+		_setmode(_fileno(stdout), _O_TEXT);
+	}
+	file.close();
+}
+
+void main(int argc, char* argv[])
+{
+	std::string reqmethod = getenv("REQUEST_METHOD");
+	std::string q_string = getenv("QUERY_STRING");
+	//
+	std::string postInputString;
+
+	std::string nazivSlike;
+
+	if (reqmethod == "GET") // GET zahtev
+	{
+		if (!q_string.empty())
+			nazivSlike = parse(q_string);
+	}
+	else if (reqmethod == "POST") // POST zahtev
+	{
+		int br_byte = atoi(getenv("CONTENT_LENGTH"));
+		if (!q_string.empty())
+			nazivSlike = parse(q_string);
+
+		if(br_byte>0)
+			postInputString = parse(q_string);
+
+		
+	}
+
+	SendFile(nazivSlike);
+
+}
+
