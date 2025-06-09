@@ -1,0 +1,87 @@
+#include <iostream>      // std::cout, std::cin
+#include <cstdlib>       // getenv(), atoi()
+#include <string>        // std::string
+#include <fstream>       // std::ifstream
+#include <vector>        // std::vector
+#include <io.h>          // _fileno()       ← Windows-specific
+#include <fcntl.h>       // _O_BINARY, _O_TEXT  ← Windows-specific
+#include <map>
+#include <sstream>
+#include <iomanip>
+#include <regex>
+
+struct FormData {
+	std::string dest;
+	int brojOdraslih = 0;
+	int brojDece = 0;
+};
+
+FormData parse(std::string str)
+{
+	FormData data;
+
+	int pos1 = str.find("dest=", 0);
+	int pos2 = str.find("&", pos1 + 5);
+	data.dest = str.substr(pos1+5, pos2-pos1-5);
+
+	pos1 = str.find("brojodraslih=", pos2);
+	pos2 = str.find("&", pos1 + 13);
+	std::string brojodraslih = str.substr(pos1 + 13, pos2-pos1-13);
+	data.brojOdraslih = std::stoi(brojodraslih);
+
+	pos1 = str.find("brojdece=", pos2);
+	std::string brojDece = str.substr(pos1 + 9, pos2);
+	data.brojDece = std::stoi(str.substr(pos1 + 9));
+
+	return data;
+}
+
+void main(int argc, char* argv[])
+{
+	std::string reqmethod = getenv("REQUEST_METHOD");
+	std::string q_string = getenv("QUERY_STRING");
+	int br_byte = atoi(getenv("CONTENT_LENGTH"));
+	std::string postInputString;
+
+	FormData form;
+
+	if (reqmethod == "GET") // GET zahtev
+	{
+		if (!q_string.empty())
+			form=parse(q_string);
+	}
+	else if (reqmethod == "POST") // POST zahtev
+	{
+		if (!q_string.empty())
+			form=parse(q_string);
+
+		if (br_byte > 0)
+		{
+			std::cin >> postInputString;
+			form=parse(postInputString);
+		}
+	}
+
+	long long cena = form.brojDece * 50 + form.brojOdraslih * 100;
+	if (form.dest == "Spanija") cena *= 10000;
+	else if (form.dest == "Grcka") cena *= 100;
+	else if (form.dest == "Italija") cena *= 1000;
+
+	//spanija 300
+	//grcka 100
+	//italija 200
+
+	//deca 50
+	//odrasli 100 
+
+	std::cout << "Content-Type: text/html\n\n";
+	std::cout << "<html> <head>\n";
+	std::cout << "<title>Proracun</title>\n";
+	std::cout << "</head>\n";
+	std::cout << "<body>\n";
+	std::cout << "<h1>Prosecna cena letovanja: </h1>\n";
+	std::cout << cena << "\n";
+	std::cout << "</body> </html>\n";
+
+}
+
