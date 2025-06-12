@@ -1,0 +1,101 @@
+#include <winsock.h>
+#include <stdio.h>
+#include <string.h>
+#include <iostream>
+#pragma comment(lib, "wsock32.lib")
+
+unsigned long resolveName(char* name, int n)
+{
+	struct hostent* remote_host;
+	if ((remote_host = gethostbyname(name)) == NULL)
+	{
+		printf("Host resolution failed.\n");
+		WSACleanup();
+		return 1;
+	}
+	return *((unsigned long*)remote_host->h_addr_list[0]);
+}
+
+void fetchPage(const char* hostname) {
+	unsigned long ip = resolveName((char*)hostname, strlen(hostname));
+
+	WSAData wsa;
+	WSAStartup(0x0202, &wsa);
+
+	SOCKET cSocket;
+	sockaddr_in server;
+
+	if ((cSocket = socket(AF_INET, SOCK_STREAM, 0)) == SOCKET_ERROR) {
+		closesocket(cSocket);
+		WSACleanup();
+		exit(1);
+	}
+
+	server.sin_family = AF_INET;
+	server.sin_port = htons(80);
+	server.sin_addr.s_addr = ip;
+
+	if (connect(cSocket, (sockaddr*)&server, sizeof(sockaddr)) == SOCKET_ERROR) {
+		closesocket(cSocket);
+		WSACleanup();
+		exit(1);
+	}
+
+
+	char send_buff[] = "GET / HTTP/1.1\r\nHost: wikipedia.org\r\nConnection: close\r\n\r\n";
+	char recv_buff[1024];
+
+
+	if (send(cSocket, send_buff, strlen(send_buff) + 1, 0) < 0) {
+		closesocket(cSocket);
+		WSACleanup();
+		exit(1);
+	}
+
+	if (recv(cSocket, recv_buff, 1024, 0) < 0) {
+		closesocket(cSocket);
+		WSACleanup();
+		exit(1);
+	}
+
+	char* t = strstr(recv_buff, "HTTP/1.0 200 OK");
+	if (t != NULL) {
+		send(cSocket, recv_buff, 1024, 0);
+	}
+	else
+	{
+		char newLoc[100];
+
+		t = strstr(recv_buff, "301 Moved Permanently");
+		if (t != NULL)
+		{
+			t = strstr(recv_buff, "location: ");
+			if (t != NULL)
+			{
+				int i = 0;
+				t += strlen("location: ");
+				while (*t != '\r' && *t != '\n' && *t != '\0') 
+				{
+					newLoc[i++] = *t++;
+				}
+				newLoc[i] = '\0';
+
+			}
+		}
+
+		closesocket(cSocket);
+		WSACleanup();
+		fetchPage(newLoc);
+
+	}
+
+}
+
+int main()
+{
+
+	fetchPage("www.wikipedia.org");
+	return 0;
+}
+
+//NE RADI ZBOG OBAJ JEBENI NAME TO IP I JA STVARNO NE ZNAM KAKO TO DA RESIM JEBEM LI MU SE 
